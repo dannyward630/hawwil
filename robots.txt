@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://l7v0l.github.io/hawwil/sitemap.xml
