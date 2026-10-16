@@ -15,6 +15,7 @@ export default function mount(root) {
     const out = await PDFDocument.create();
     let total = 0;
     for (let i = 0; i < files.length; i++) {
+      prog.check();
       prog.set(i / files.length, t('status.processing', { i: i + 1, n: files.length }));
       let src;
       try { src = await PDFDocument.load(await files[i].arrayBuffer()); }

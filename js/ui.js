@@ -1,6 +1,8 @@
 import { t, node, num, getLang } from './i18n.js';
 import * as libs from './libs.js';
 import { icon } from './icons.js';
+import { TOOLS } from './registry.js';
+import * as handoff from './handoff.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 
@@ -118,7 +120,7 @@ export function createFileList({ thumbs = true, reorder = true, onChange = () =>
   function render() {
     ul.replaceChildren(...items.map((it, i) => {
       const th = h('div', { class: 'th' });
-      if (thumbs && it.file.type.startsWith('image/')) {
+      if (thumbs && it.file.type.startsWith('image/') && !/hei[cf]/i.test(it.file.type + it.file.name)) {
         if (!it.url) { it.url = URL.createObjectURL(it.file); urls.add(it.url); }
         th.append(h('img', { src: it.url, alt: '', loading: 'lazy' }));
       } else th.append(fileIcon(it.file));
@@ -155,9 +157,16 @@ export function createFileList({ thumbs = true, reorder = true, onChange = () =>
 }
 
 /* ---------- progress ---------- */
+export class CancelError extends Error { constructor() { super('cancelled'); this.cancelled = true; } }
+
 export function createProgress() {
   const bar = h('i'), label = h('small');
-  const el = h('div', { class: 'prog', hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('div', { class: 'bar' }, bar), label);
+  let cancelled = false;
+  const hooks = new Set();
+  const stop = h('button', { type: 'button', class: 'btn ghost sm cancel' }, icon('x', 16), node('status.cancel'));
+  stop.addEventListener('click', () => { cancelled = true; hooks.forEach(fn => { try { fn(); } catch (e) { /* ignore */ } }); stop.disabled = true; });
+  const el = h('div', { class: 'prog', hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' },
+    h('div', { class: 'bar' }, bar), h('div', { class: 'pl' }, label, stop));
   return {
     el,
     set(frac, text) {
@@ -167,7 +176,13 @@ export function createProgress() {
       el.setAttribute('aria-valuenow', Math.round(p * 100));
       label.textContent = text || '';
     },
-    hide() { el.hidden = true; }
+    hide() { el.hidden = true; },
+    reset() { cancelled = false; hooks.clear(); stop.disabled = false; },
+    get cancelled() { return cancelled; },
+    /* call inside loops: throws when the user pressed Cancel */
+    check() { if (cancelled) throw new CancelError(); },
+    /* run fn when Cancel is pressed (e.g. terminate a worker); returns an unsubscribe function */
+    onCancel(fn) { hooks.add(fn); return () => hooks.delete(fn); }
   };
 }
 
@@ -193,7 +208,8 @@ export function createResults() {
       else th.append(icon(it.icon || 'file', 22));
       ul.append(h('li', { style: `--i:${Math.min(ul.children.length, 10)}` }, th,
         h('div', { class: 'nm' }, h('b', { title: it.name }, it.name),
-          h('small', { class: it.good ? 'good' : '' }, fmtBytes(it.blob.size), it.note ? ' · ' : '', it.note || '')),
+          h('small', { class: it.good ? 'good' : '' }, fmtBytes(it.blob.size), it.note ? ' · ' : '', it.note || ''),
+          it.before && it.before > 0 ? h('div', { class: 'cmpbar', title: `${fmtBytes(it.before)} → ${fmtBytes(it.blob.size)}` }, h('i', { style: `width:${Math.max(2, Math.min(100, it.blob.size / it.before * 100)).toFixed(1)}%` })) : null),
         h('a', { class: 'btn sm', href: url, download: it.name }, icon('download', 16), node('res.download'))));
     });
     box.append(ul);
@@ -209,7 +225,33 @@ export function createResults() {
       });
       box.append(btn);
     }
+    chain(items);
     box.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+  }
+  /* "continue with…": send the results straight to another tool without uploading again */
+  function chain(items) {
+    const here = document.body.dataset.tool;
+    const groups = {};
+    items.forEach(it => { const k = handoff.kindOf({ name: it.name, type: it.blob.type }); (groups[k] ||= []).push(it); });
+    const targets = [];
+    for (const [k, list] of Object.entries(groups)) {
+      for (const id of handoff.TOOLS_FOR[k] || []) {
+        const def = TOOLS.find(x => x.id === id);
+        if (def && id !== here && !targets.some(x => x.id === id) && k !== 'other') targets.push({ id, def, list });
+      }
+    }
+    if (!targets.length) return;
+    const row = h('div', { class: 'chain' }, h('b', {}, node('chain.title')));
+    targets.slice(0, 6).forEach(({ id, def, list }) => {
+      const b = h('button', { type: 'button', class: 'chip' }, icon(def.icon, 16), node(id + '.title'));
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { await handoff.put(list.map(it => new File([it.blob], it.name, { type: it.blob.type }))); location.href = id + '.html?h=1'; }
+        catch (e) { toast('err.generic', null, true); b.disabled = false; }
+      });
+      row.append(b);
+    });
+    box.append(row);
   }
   return { el: box, render, clear };
 }
@@ -261,8 +303,10 @@ export const select = (id, options, value, opts) => seg(id, options, value, opts
 /* run an async task with busy state + friendly errors */
 export async function runTask(btn, prog, fn) {
   btn.disabled = true;
+  if (prog.reset) prog.reset();
   try { await fn(); }
   catch (e) {
+    if (e && e.cancelled) { toast('status.cancelled'); return; }
     console.error(e);
     const msg = e && e.userKey ? e.userKey : /password/i.test(e?.name || e?.message || '') ? 'err.password' : /lib:/.test(e?.message || '') ? 'err.lib' : 'err.generic';
     toast(msg, e && e.vars, true);

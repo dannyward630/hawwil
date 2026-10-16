@@ -1,6 +1,24 @@
 /* Image helpers: decode (with EXIF orientation), draw, encode. */
+import * as libs from './libs.js';
+
+export const isHeic = f => /^image\/hei[cf]/.test(f.type || '') || /\.hei[cf]$/i.test(f.name || '');
+
+/* browsers cannot decode HEIC/HEIF (iPhone photos): convert to JPEG with heic2any, then continue as normal */
+export async function heicToJpeg(file) {
+  try {
+    const heic2any = await libs.heic2any();
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.95 });
+    const blob = Array.isArray(out) ? out[0] : out;
+    return new File([blob], (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) {
+    const err = new Error('decode');
+    err.userKey = 'err.heic';
+    throw err;
+  }
+}
 
 export async function decodeImage(file) {
+  if (isHeic(file)) file = await heicToJpeg(file);
   try {
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
     return { source: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close() };
@@ -55,7 +73,7 @@ export function hasAlpha(canvas) {
 }
 
 export const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-export const IMAGE_ACCEPT = ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico'];
+export const IMAGE_ACCEPT = ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico', '.heic', '.heif'];
 
 /* is this blob really the type we asked for? (browsers fall back to PNG) */
 export const sameType = (blob, type) => blob.type === type;

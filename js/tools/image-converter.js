@@ -1,11 +1,12 @@
 import { h, node, t, field, select, createDropzone, createFileList, createProgress, createResults, runTask, baseName, safeName, uniqueName, fmtBytes } from '../ui.js';
-import { decodeImage, drawToCanvas, canvasToBlob, fitSize, EXT, IMAGE_ACCEPT } from '../img.js';
+import { EXT, IMAGE_ACCEPT } from '../img.js';
+import { convertImage } from '../imgproc.js';
 
 const TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
 
-export default function mount(root) {
+export default function mount(root, { heic = false } = {}) {
   const list = createFileList({ onChange: f => { go.disabled = !f.length; } });
-  const drop = createDropzone({ accept: IMAGE_ACCEPT, icon: 'convert', hint: 'conv.hint', onFiles: f => list.add(f) });
+  const drop = createDropzone({ accept: heic ? ['.heic', '.heif', 'image/heic', 'image/heif'] : IMAGE_ACCEPT, icon: heic ? 'image' : 'convert', hint: heic ? 'heic.hint' : 'conv.hint', onFiles: f => list.add(f) });
   const fmt = select('o-fmt', [['jpg', 'o.jpg', 'fmt-jpg'], ['png', 'o.png', 'fmt-png'], ['webp', 'o.webp', 'fmt-webp']], 'jpg');
   const q = h('input', { type: 'range', id: 'o-q', min: '10', max: '100', value: '90' });
   const qv = h('span', { class: 'val' }, '90%');
@@ -21,15 +22,11 @@ export default function mount(root) {
     const files = list.files(), items = [], used = new Set();
     const type = TYPES[fmt.value];
     for (let i = 0; i < files.length; i++) {
+      prog.check();
       prog.set(i / files.length, t('status.processing', { i: i + 1, n: files.length }));
-      const dec = await decodeImage(files[i]);
-      const [w, hh] = fitSize(dec.width, dec.height, +dim.value);
-      const canvas = drawToCanvas(dec, w, hh, type === 'image/jpeg' ? '#fff' : null);
-      dec.close();
-      const blob = await canvasToBlob(canvas, type, +q.value / 100);
-      items.push({ name: uniqueName(safeName(baseName(files[i].name)) + '.' + EXT[type], used), blob, thumb: blob, icon: 'image',
-        note: `${w}×${hh}` });
-      await new Promise(r => setTimeout(r));
+      const r = await convertImage(files[i], { type, quality: +q.value / 100, maxDim: +dim.value, bg: '#fff' }, prog);
+      items.push({ name: uniqueName(safeName(baseName(files[i].name)) + '.' + (EXT[r.type] || 'jpg'), used), blob: r.blob, thumb: r.blob, icon: 'image',
+        note: `${r.w}×${r.h}`, before: files[i].size });
     }
     await res.render(items, { zipName: 'converted-images.zip' });
   }));

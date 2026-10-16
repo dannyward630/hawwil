@@ -10,6 +10,14 @@ function setTheme(th, save) {
   if (save) { try { localStorage.setItem('hw-theme', th); } catch (e) { /* ignore */ } }
 }
 
+/* Hawwil Lite: bigger controls and a simpler layout on phones (automatic below 640px, can be switched off) */
+(function initLite() {
+  let pref = null;
+  try { pref = localStorage.getItem('hw-lite'); } catch (e) { /* ignore */ }
+  const on = pref ? pref === 'on' : matchMedia('(max-width:640px)').matches;
+  document.documentElement.classList.toggle('lite', on);
+})();
+
 export function renderChrome() {
   const lang = h('button', { type: 'button', class: 'chip', id: 'lang-btn' }, icon('globe', 16), h('span', { id: 'lang-txt' }));
   const paint = () => { document.getElementById('lang-txt').textContent = getLang() === 'ar' ? 'English' : 'العربية'; };
@@ -24,11 +32,22 @@ export function renderChrome() {
   document.getElementById('top').replaceChildren(
     h('a', { class: 'brand', href: 'index.html', 'aria-label': 'Hawwil' }, logo(40), h('span', { class: 'wm' }, node('brand'))),
     h('span', { class: 'sp' }), lang, theme);
+  const liteBtn = h('button', { type: 'button', class: 'chip', id: 'lite-btn', style: 'padding:4px 12px;font-size:.82rem' }, icon('zap', 14), h('span', { id: 'lite-txt' }));
+  const paintLite = () => { document.getElementById('lite-txt').textContent = t(document.documentElement.classList.contains('lite') ? 'lite.off' : 'lite.on'); };
+  liteBtn.addEventListener('click', () => {
+    const on = !document.documentElement.classList.contains('lite');
+    document.documentElement.classList.toggle('lite', on);
+    try { localStorage.setItem('hw-lite', on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    paintLite();
+  });
+  document.addEventListener('langchange', paintLite);
   document.getElementById('foot').replaceChildren(
     h('span', { class: 'fl' }, icon('shield', 16), node('foot.privacy')),
+    h('span', { class: 'legal' }, h('a', { href: 'privacy.html' }, node('foot.privacy.link')), liteBtn),
     h('span', {}, h('a', { href: 'https://github.com/l7v0l', target: '_blank', rel: 'noopener' }, `© ${new Date().getFullYear()} l7v0l`), ' · ', h('a', { href: 'https://github.com/l7v0l/hawwil', target: '_blank', rel: 'noopener' }, 'GitHub')));
   initLang();
   paint();
+  paintLite();
   initFX();
 
   /* 3D background: load after first paint so it never blocks content */

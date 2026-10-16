@@ -3,6 +3,20 @@ import { TOOLS } from './registry.js';
 import { h } from './ui.js';
 import { icon } from './icons.js';
 import { t, node, apply } from './i18n.js';
+import * as handoff from './handoff.js';
+
+/* files sent from another tool, the share sheet or a file association: drop them into this tool's file input */
+async function takeHandoff(root) {
+  if (!new URLSearchParams(location.search).has('h')) return;          // only when sent from another page
+  const input = root.querySelector('input[type=file]');
+  if (!input) return;
+  const files = await handoff.take();
+  if (!files.length) return;
+  const dt = new DataTransfer();
+  files.forEach(f => dt.items.add(f));
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change'));
+}
 
 const id = document.body.dataset.tool;
 const def = TOOLS.find(x => x.id === id);
@@ -31,8 +45,9 @@ async function start() {
   document.addEventListener('langchange', setTitle);
   try {
     const mod = await import('./tools/' + (def.mod || def.id) + '.js');
-    mod.default(root, def.opts || {});
+    await mod.default(root, def.opts || {});
     apply(root);
+    await takeHandoff(root);
   } catch (e) {
     console.error(e);
     root.append(h('p', { class: 'warn' }, node('err.lib')));

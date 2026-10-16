@@ -20,6 +20,10 @@ export const pdfLib = () => load('pdf-lib.min.js', 'PDFLib');
 export const jszip = () => load('jszip.min.js', 'JSZip');
 export const marked = () => load('marked.min.js', 'marked');
 export const html2canvas = () => load('html2canvas.min.js', 'html2canvas');
+export const heic2any = () => load('heic2any.min.js', 'heic2any');
+export const mammoth = () => load('mammoth.browser.min.js', 'mammoth');
+export const lamejs = () => load('lame.min.js', 'lamejs');
+export const vendorUrl = file => base + file;
 export async function pdfjs() {
   const lib = await load('pdf.min.js', 'pdfjsLib');
   lib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';

@@ -25,6 +25,7 @@ export default function mount(root) {
     const { PDFDocument } = await libs.pdfLib();
     const doc = await PDFDocument.create();
     for (let i = 0; i < files.length; i++) {
+      prog.check();
       prog.set(i / files.length, t('status.processing', { i: i + 1, n: files.length }));
       const dec = await decodeImage(files[i]);
       const [w, hh] = fitSize(dec.width, dec.height, 6000);

@@ -25,6 +25,7 @@ export default function mount(root) {
     const items = [];
     const pad = String(pdf.numPages).length;
     for (let i = 0; i < nums.length; i++) {
+      prog.check();
       prog.set(i / nums.length, t('status.page', { i: i + 1, n: nums.length }));
       const page = await pdf.getPage(nums[i]);
       let scale = +dpi.value / 72;

@@ -40,6 +40,7 @@ export default function mount(root) {
     }
     const items = [];
     for (let g = 0; g < groups.length; g++) {
+      prog.check();
       prog.set(g / groups.length, t('status.processing', { i: g + 1, n: groups.length }));
       const out = await PDFDocument.create();
       (await out.copyPages(src, groups[g].map(p => p - 1))).forEach(p => out.addPage(p));

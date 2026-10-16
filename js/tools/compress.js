@@ -1,9 +1,10 @@
 import { icon } from '../icons.js';
 import { h, node, t, num, field, select, seg, createDropzone, createFileList, createProgress, createResults, runTask, baseName, extOf, safeName, uniqueName, fmtBytes, downloadBlob } from '../ui.js';
 import * as libs from '../libs.js';
-import { decodeImage, drawToCanvas, canvasToBlob, hasAlpha, fitSize, EXT } from '../img.js';
+import { canvasToBlob, EXT } from '../img.js';
+import { convertImage } from '../imgproc.js';
 
-const IMG_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'avif', 'svg', 'ico'];
+const IMG_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'avif', 'svg', 'ico', 'heic', 'heif'];
 let onlyZip = false;
 const kindOf = f => onlyZip ? 'other' : (f.type === 'application/pdf' || extOf(f.name) === 'pdf') ? 'pdf'
   : (f.type.startsWith('image/') || IMG_EXT.includes(extOf(f.name))) ? 'image' : 'other';
@@ -32,9 +33,13 @@ export default function mount(root, { kinds = ['image', 'pdf', 'other'] } = {}) 
   q.addEventListener('input', () => { qv.textContent = q.value + '%'; });
   const dim = select('o-dim', [['0', 'o.dim.orig', 'image'], ['3840', 'o.dim.3840'], ['2560', 'o.dim.2560'], ['1920', 'o.dim.1920'], ['1280', 'o.dim.1280'], ['800', 'o.dim.800']], '0');
   const ofmt = select('o-ofmt', [['auto', 'o.auto', 'auto'], ['jpg', 'o.jpg', 'fmt-jpg'], ['webp', 'o.webp', 'fmt-webp']], 'auto');
+  const preset = select('o-preset', [['custom', 'pre.custom', 'gauge'], ['t1000', 'pre.1mb', 'minimize'], ['t500', 'pre.500kb', 'minimize'], ['t200', 'pre.200kb', 'minimize'],
+    ['t100', 'pre.100kb', 'minimize'], ['id', 'pre.id', 'portrait'], ['square', 'pre.square', 'image']], 'custom');
+  const fQ = h('div', { class: 'fld' }, h('label', { for: 'o-q' }, node('o.quality'), ' ', qv), q), fDim = field('o.maxdim', dim, 'o-dim'), fFmt = field('o.outfmt', ofmt, 'o-ofmt');
+  const presetNote = h('p', { class: 'note', hidden: true }, node('pre.note'));
+  preset.addEventListener('change', () => { const c = preset.value === 'custom'; fQ.hidden = fDim.hidden = fFmt.hidden = !c; presetNote.hidden = c; });
   const imgSec = h('section', { class: 'card', hidden: true }, h('h2', {}, icon('image', 20), node('cmp.img')),
-    h('div', { class: 'opts' }, h('div', { class: 'fld' }, h('label', { for: 'o-q' }, node('o.quality'), ' ', qv), q),
-      field('o.maxdim', dim, 'o-dim'), field('o.outfmt', ofmt, 'o-ofmt')));
+    field('pre.title', preset, 'o-preset'), presetNote, h('div', { class: 'opts', style: 'margin-top:12px' }, fQ, fDim, fFmt));
   /* pdf options */
   const pmode = seg('o-pmode', [['light', 'cmp.pdf.light', 'text', 'cmp.pdf.light.d'], ['strong', 'cmp.pdf.strong', 'image', 'cmp.pdf.strong.d']], 'light', { cards: true });
   const plevel = select('o-plevel', [['high', 'cmp.lvl.high', 'q-high'], ['medium', 'cmp.lvl.medium', 'q-mid'], ['low', 'cmp.lvl.low', 'q-low']], 'medium');
@@ -52,18 +57,15 @@ export default function mount(root, { kinds = ['image', 'pdf', 'other'] } = {}) 
   const go = h('button', { type: 'button', class: 'btn', disabled: true }, node('cmp.go'));
   const prog = createProgress(), res = createResults();
 
+  const PRESETS = {
+    t1000: { target: 1000 * 1024, maxDim: 3000 }, t500: { target: 500 * 1024, maxDim: 2400 }, t200: { target: 200 * 1024, maxDim: 1600 }, t100: { target: 100 * 1024, maxDim: 1200 },
+    id: { target: 300 * 1024, maxDim: 800, crop: '3:4' }, square: { target: 150 * 1024, maxDim: 512, crop: '1:1' }
+  };
   async function compressImage(file) {
-    const dec = await decodeImage(file);
-    const [w, hh] = fitSize(dec.width, dec.height, +dim.value);
-    let canvas = drawToCanvas(dec, w, hh);
-    dec.close();
-    const alpha = hasAlpha(canvas);
-    let type = ofmt.value === 'jpg' ? 'image/jpeg' : ofmt.value === 'webp' ? 'image/webp'
-      : (file.type === 'image/webp' ? 'image/webp' : alpha ? 'image/webp' : 'image/jpeg');
-    if (type === 'image/jpeg' && alpha) canvas = drawToCanvas({ source: canvas }, w, hh, '#fff');
-    let blob = await canvasToBlob(canvas, type, +q.value / 100);
-    if (blob.type !== type) type = blob.type;      // browser could not encode webp
-    return { blob, ext: EXT[blob.type] || 'jpg', w, h: hh };
+    const p = PRESETS[preset.value];
+    const type = p ? 'auto' : ofmt.value === 'jpg' ? 'image/jpeg' : ofmt.value === 'webp' ? 'image/webp' : 'auto';
+    const r = await convertImage(file, p ? { type, quality: 0.9, bg: '#fff', ...p } : { type, quality: +q.value / 100, maxDim: +dim.value, bg: '#fff' }, prog);
+    return { blob: r.blob, ext: EXT[r.blob.type] || 'jpg', w: r.w, h: r.h };
   }
 
   async function compressPdf(file, mode, onPage) {
@@ -79,6 +81,7 @@ export default function mount(root, { kinds = ['image', 'pdf', 'other'] } = {}) 
     const src = await pdfjs.getDocument({ data: bytes.slice(0) }).promise;
     const out = await PDFDocument.create();
     for (let p = 1; p <= src.numPages; p++) {
+      prog.check();
       onPage(p, src.numPages);
       const page = await src.getPage(p);
       const base = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: scale * 1.333 });
@@ -106,6 +109,7 @@ export default function mount(root, { kinds = ['image', 'pdf', 'other'] } = {}) 
     const tick = text => prog.set(step / total, text);
 
     for (const f of files) {
+      prog.check();
       const kind = kindOf(f);
       if (kind === 'other') continue;
       tick(t('status.processing', { i: step + 1, n: total }));
@@ -121,7 +125,7 @@ export default function mount(root, { kinds = ['image', 'pdf', 'other'] } = {}) 
       if (blob.size >= f.size * 0.99) { finalBlob = f; name = safeName(f.name); note = t('cmp.already'); }
       else { note = t('cmp.saved', { p: pct(f.size, blob.size), from: fmtBytes(f.size) }); good = true; }
       before += f.size; after += finalBlob.size;
-      items.push({ name: uniqueName(name, used), blob: finalBlob, thumb: kind === 'image' ? finalBlob : null, icon: kind === 'pdf' ? 'pdf' : 'image', note, good });
+      items.push({ name: uniqueName(name, used), blob: finalBlob, thumb: kind === 'image' ? finalBlob : null, icon: kind === 'pdf' ? 'pdf' : 'image', note, good, before: f.size });
       step++;
       await new Promise(r => setTimeout(r));
     }
