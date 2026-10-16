@@ -1,0 +1,21 @@
+name: Tool or feature idea | فكرة أداة أو ميزة
+description: Suggest something new for Hawwil
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What do you want to do? | ماذا تريد أن تفعل؟
+      description: Describe the task you are trying to finish, not only the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter? | لماذا هو مهم؟
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Want to help? | تبغى تساعد؟
+      options:
+        - label: I can try to build it myself | أقدر أبنيها بنفسي

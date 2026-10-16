@@ -65,6 +65,11 @@
 
 [three.js](https://github.com/mrdoob/three.js), [pdf-lib](https://github.com/Hopding/pdf-lib), [PDF.js](https://github.com/mozilla/pdf.js), [JSZip](https://github.com/Stuk/jszip), [marked](https://github.com/markedjs/marked), [html2canvas](https://github.com/niklasvh/html2canvas), [heic2any](https://github.com/alexcorvi/heic2any), [mammoth.js](https://github.com/mwilliamson/mammoth.js), [lamejs](https://github.com/zhuker/lamejs).
 
+## Contributing | المساهمة
+
+Contributions are welcome, from a typo to a new tool. Start with [CONTRIBUTING.md](CONTRIBUTING.md), pick a [`good first issue`](https://github.com/l7v0l/hawwil/labels/good%20first%20issue), or share an idea in [Discussions](https://github.com/l7v0l/hawwil/discussions).
+المساهمات مرحّب بها، من تصحيح كلمة إلى أداة جديدة. ابدأ من [CONTRIBUTING.md](CONTRIBUTING.md) أو اختر [`good first issue`](https://github.com/l7v0l/hawwil/labels/good%20first%20issue).
+
 ## Support | دعم المشروع
 
 If this helped you, give it a ⭐. Found a bug or have an idea? Open an [Issue](https://github.com/l7v0l/hawwil/issues).
